@@ -261,120 +261,12 @@ int main(int argc, char *argv[])
             }
             fsetpos(input, &pos);   ///resets position in case of more lines
 
-		}
 		//only task0 can do anything with the main files
 		fclose(input);
 		fclose(mainOut);
-		//want to add information from fits file here
-		mainOut = fopen("lamost.out", "r");
-        sprintf(buffer, "%s.out", Dirname);
-        finalOut = fopen(buffer,"w+");
-        outputLine = (char*)calloc(90,sizeof(char));
-		namechar = (char*)calloc(15, sizeof(char));
-        signal = (char*)calloc(10, sizeof(char));
-        spec = (char*)calloc(50, sizeof(char));
-        outEnd = (char*)calloc(50, sizeof(char));
-        int strlength =  0;
-        while(fgets(outputLine,90,mainOut) != NULL)
-        {
-            strlength = 0;
-            //takes the place of calling calloc and free each time to erase contents
-            //as doing that causes malloc invalid size errors for no real reason.
-            if(sentOnce)
-            {
-                for(i = 0; i<50;i++)
-				spec[i] = NULL;
-            }
-            done = false; name = false; final = false, first = true;
-            j = 0; w =0;
-            //goes through line to get spectrum name and saves the rest to outEnd
-            for(i =0; i<90;i++)
-            {
-                if(outputLine[i] == period && name == false)
-                {
-                    printf("spec b4 file:%s\n",spec);
-                    fprintf(finalOut,"%s.nor |",spec);
-                    spec[i] = outputLine[i];
-                    done = true;
-					tempv = i;
-                    strlength++;
-                }
-                else if(done && i == tempv + 1)
-                    spec[i] = 'f';
-                else if(done && i == tempv + 2)
-                    spec[i] = 'i';
-                else if(done && i == tempv + 3)
-                    spec[i] = 't';
-                else if(done && i == tempv + 4)
-                    spec[i] = 's';
-                else if(done && i == tempv + 5)
-                {
-					strlength = strlength + 7;
-                    printf("file:%s\n",spec);
-                    name = true; //done getting name
-                }
-                else if(!done)
-                {
-                    spec[i] = outputLine[i];
-                    strlength++;
-                }
-                //need to store the rest of the data
-                if(i == strlength   && name==true && done == true)
-                {
-                    outEnd[j] = outputLine[i];
-					j++; w++;
-                    printf("in strlen\n");
-                    final = true;
-                    if(j ==49)
-                    {
-                        printf("j too big1\n");
-                        break;
-                    }
-                }
-                else if(final == true)
-                {
-                    outEnd[j] = outputLine[i];
-                    j++;
-//can't remove extra spaces after classification
-//as they aren't actually spaces and trying to limit it doesn't work
-                }
-            }
-            printf("%s\n", outEnd);
-            fits_open_file(&fitsFile,spec,READONLY,&fitsstatus);
-            fits_get_errstatus(fitsstatus,buffer);
-            fits_read_key(fitsFile,TFLOAT,"RA_OBS",&RA,NULL,&fitsstatus);
-            fits_get_errstatus(fitsstatus, buffer);
-            //RA should be in hours instead of degrees.  To do that, divide RA in degrees by 15.0.
-            RA = RA / 15.0; //puts RA in hours
-            fits_read_key(fitsFile,TFLOAT,"DEC_OBS",&DEC,NULL,&fitsstatus); //works
-            fits_get_errstatus(fitsstatus, buffer);
-            fits_read_key(fitsFile,TSTRING,"OBJNAME",namechar, NULL, &fitsstatus);
-            fits_get_errstatus(fitsstatus, buffer);
-            fits_read_key(fitsFile,TSTRING,"SNRG", signal, NULL, &fitsstatus);
-			fits_get_errstatus(fitsstatus, buffer);
-            fits_close_file(fitsFile,&fitsstatus);
-            if(strlen(signal) < 6)
-            {
-                signal[5] = ' ';
-                if(strlen(signal) < 5)
-                    signal[4] = ' ';
-            }
-            fprintf(finalOut," %f  %f | %s | %s | %s",RA,DEC,namechar,signal,outEnd);
-			sentOnce = true;
-        }
-
-        printf("freeins stuff\n");
-        free(outputLine);
-        free(signal);
-        free(namechar);
-        free(spec);
-        free(outEnd);
-        fclose(finalOut);
-        printf("freed\n");
-        sprintf(buffer, "cp ./%s.out /media/pi/LAMOST/Results/%s.out", Dirname, Dirname);
-        err = system(buffer);
-	}
-	else 
+       }
+		
+   else 
     {
 		MPI_Barrier(MPI_COMM_WORLD);
 		//just puts all output files in same place to make it easy to delete
