@@ -1,0 +1,379 @@
+//start_mkclass_pirallel
+//Author: Brittany Smith
+//Takes one tar file from fileNames.txt at at time and uses it to
+//start up run_mkclass_pirallel with a user specified amount of tasks and hosts
+//user will be asked to input needed information on command line after starting the code
+//but it will only need to be entered once
+//If the length of the tar file names ever exceeds 100, increase constant MAXFILENAMELENGTH
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <stdbool.h>
+#include <sys/time.h> //for timing version only
+#include <time.h>
+int checkHosts(int numberHosts, int avHosts,int userLength);
+#define TRUE 1
+#define FALSE 0
+//for timed version
+struct timeval startTime, endTime;
+long elapsedMicro;
+double elapsedMin, elapsedSec;
+char userInput[100], buffer[60], tempname[100];
+char *hosts, *tempHost, *program, *fullProgram;
+FILE *nmap;
+int maxhost;
+int main(int argc, char *argv[])
+{
+    const int MAXFILENAMELENGTH = 100;
+	FILE *in,*out,*input,*output,*mainOut, *finalOut, *timedata;
+    char dirfile[80], Dirname[80], *p;
+    char *batLine, *sentbatch, *outputLine, *command, *finalCommand, *lOut, *spec, *outEnd;
+    char *namechar, *signal;
+    int n, w, tempv, err;
+    const char letterm = 'm',letterf = 'f', period = '.';
+    bool sentOnce = false, done, name, final, first, answer, incorrect = true, firstHost = true;
+    char tarFile[100]; //4X the length of longest name
+	const char programName[94] = "mpiexec -N 4 --host 10.0.0.3,10.0.0.4,10.0.0.5,10.0.0.6 -oversubscribe run_mkclass_pirallel ";
+	int length, i, j = 0, totLength = 58, tasks, tarLen, numHosts = 0;
+    int availableHosts = 0, maxHostLength = 30; //longest an available host name can be
+	//to store local times
+	struct tm* startTS;
+    struct tm* endTS;
+        if(argc != 2)
+		{
+			//only want one directory to be passed in
+			printf("Usage: startMkClassParallel tarfilenames.txt\n");
+            printf("Run filesToText to create a usable text file called fileNames.txt\n");
+			exit(1);
+		}
+		printf("Enter the host names to run on using the following format:\n");
+        printf("host1,host2,host3; or 10.0.0.3,10.0.0.4, 10.0.0.5;\n");
+        printf("Where the first host listed will have the master task\n");
+        scanf("%s", userInput);
+        length = strlen(userInput);
+        totLength += length;
+        hosts = (char*)calloc(length,sizeof(char));
+        tempHost = (char*)calloc(20,sizeof(char));
+        int templength = 0;
+        for(i = 0;i < length;i++)
+        {
+			if(userInput[i] == ',')
+            {
+                //check validity of tempHost here
+                if(firstHost)
+                {
+                    sprintf(buffer,"nmap -sn %s/24 --open -oN nmap.txt",tempHost);
+                    system(buffer);
+                    nmap = fopen("nmap.txt", "r");
+                    while(fgets(tempname,100,nmap) != NULL)
+                    {
+                        if(tempname[0] == '#')
+                            availableHosts = availableHosts; //aka do nothing
+                        else if(tempname[0] == 'H')
+							availableHosts = availableHosts; //may want to check ava$
+                        else if(tempname[0] == 'N')
+                        {
+                            
+                            availableHosts ++;
+                        }
+                    }
+                    firstHost = false;
+                    fclose(nmap);
+                }
+                //reset temp host in case host names are different lengths
+                free(tempHost);
+                tempHost = (char*)calloc(20,sizeof(char));
+                j = 0;
+                hosts[i] = userInput[i];
+                numHosts ++;
+                if(templength > maxhost)
+                    maxhost=templength;
+                templength = 0; //restart counter
+            }
+            else if (userInput[i] == ';')
+            {
+                numHosts++;
+                if( templength > maxhost)
+                    maxhost = templength;
+            }
+            else
+            {
+                hosts[i] = userInput[i];
+                tempHost[j] = userInput[i];
+                j++; templength++;
+            }
+        }
+		//want to hang up if it fails and reget the entered hosts
+        while(checkHosts(numHosts,availableHosts,length) == FALSE)
+        {
+            free(hosts); //dont want to keep the old bad hostlist
+            totLength = totLength - length; //want to remove the old length value
+            printf("Enter the host names to run on using the following format:\n");
+            printf("host1,host2,host3; or 10.0.0.3,10.0.0.4, 10.0.0.5;\n");
+            printf("Where the first host listed will have the master task\n");
+            scanf("%s", userInput);
+            length = strlen(userInput);
+            totLength += length;
+			hosts = (char*)calloc(length,sizeof(char));
+            tempHost = (char*)calloc(20,sizeof(char));
+            for(i = 0;i < length;i++)
+            {
+                if(userInput[i] == ',')
+                {
+                    //check validity of tempHost here
+                    if(firstHost)
+                    {
+                        sprintf(buffer,"nmap -sn %s/24 --open -oN nmap.txt",tempHost);
+                        system(buffer);
+                        nmap = fopen("nmap.txt", "r");
+                        while(fgets(tempname,100,nmap) != NULL)
+						{
+                            if(tempname[0] == '#')
+                                availableHosts = availableHosts; //aka do nothing
+                            else if(tempname[0] == 'H')
+                                availableHosts = availableHosts; //may want to c$
+                            else if(tempname[0] == 'N')
+								availableHosts ++;
+                        }
+                        firstHost = false;
+                        fclose(nmap);
+                    }
+                    //reset temp host in case host names are different lengths
+                    free(tempHost);
+                    tempHost = (char*)calloc(20,sizeof(char));
+                    j = 0;
+                    hosts[i] = userInput[i];
+                    numHosts ++;
+                    if(templength >maxhost)
+                        maxhost = templength;
+					templength = 0;
+				}
+                else if (userInput[i] == ';')
+                {
+                    numHosts++;
+                    if(templength >maxhost)
+                        maxhost = templength;
+                }
+                else
+                {
+                    hosts[i] = userInput[i];
+                    tempHost[j] = userInput[i];
+                    j++;templength++;
+                }
+			}
+        }
+        printf("Enter the number of tasks to run on each host\n");
+        scanf("%d",&tasks);
+        printf("Running more tasks than available processors may result in unexpected behavoir\n");
+        printf("Are you sure you want to run %d tasks per host? Y/N \n",tasks);
+        while(incorrect)
+        {
+            scanf("%c",&answer);
+            switch(answer)
+            {
+				case 'y':
+                case 'Y':
+                    incorrect = false;
+                    break;
+                case 'n':
+                case 'N':
+                    printf("exiting now\n");
+                    return(0);
+                default:
+                    printf("Enter Y or N only\n");
+                    break;
+            }
+        }
+		if(tasks >99)
+                totLength +=3; //shouldn't be needed but the option will work
+        else if(tasks > 9)
+                totLength+= 2;
+        else
+                totLength++;
+        if(numHosts>999)
+                totLength+=4;
+        else if(numHosts >99)
+                totLength +=3;
+        else if(numHosts >9)
+                totLength +=2;
+		else
+                totLength++;
+        //"mpiexec -N 4 --host 10.0.0.3,10.0.0.4,10.0.0.5,10.0.0.6 -oversubscribe run_mkclass_pirallel "
+        program = (char*)calloc(totLength, sizeof(char));
+        sprintf(program, "mpiexec -N %d --host %s -oversubscribe run_mkclass_pirallel_o",tasks,hosts);
+		input = fopen(argv[1],"r");
+		timedata = fopen("timedata.txt", "w+");
+		//getting start time in timed version
+		//only care about the time to run after user has inputed all information
+		time(&localStart);
+        startTS = localtime(&localStart);
+		fprintf(timedata,"starting time: %s \n", asctime(startTS));
+		
+        //Needs to occurs each time the curent tar file is done proccessing
+    if( fgets(tarFile,MAXFILENAMELENGTH,input) != NULL)
+    {
+        strcpy(dirfile,argv[1]);
+        p = strrchr(dirfile,'.');
+        n = p-dirfile;
+        strncpy(Dirname,dirfile,n);
+		Dirname[n] = '\0';
+        //first iteration only:
+		tarLen = strlen(tarFile); //should get length of current elements only
+        printf("tar file:%s\n", tarFile);
+	    tarLen+= totLength; //tarlen is also used as full program length
+		fullProgram = (char*)calloc(tarLen, sizeof(char));
+		sprintf(fullProgram,"%s %d %s",program,numHosts,tarFile); //combines everything
+        int waitStatus = system(fullProgram);
+		free(fullProgram); //removes all elements in fullprogram
+		sprintf(buffer, "./extractFits %s", tarFile);
+		waitStatus = system(buffer);
+        while (WIFEXITED(waitStatus)) //returns true if system call returned normally or
+        {
+			//still only want it to continue only if the next tar exists
+            if( fgets(tarFile,MAXFILENAMELENGTH,input) != NULL)
+            {
+                strcpy(dirfile,argv[1]);
+                p = strrchr(dirfile,'.');
+                n = p-dirfile;
+                strncpy(Dirname,dirfile,n);
+                Dirname[n] = '\0';
+                tarLen = strlen(tarFile); //should get length of current elements only
+                printf("tar file:%s\n", tarFile);
+                tarLen+= totLength; //tarlen is also used as full program length
+                fullProgram = (char*)calloc(tarLen, sizeof(char));
+                sprintf(fullProgram,"%s %d %s",program,numHosts,tarFile); //combines everything
+				waitStatus = system(fullProgram);
+                free(fullProgram);
+                sprintf(buffer, "./extractFits %s", tarFile);
+                waitStatus = system(buffer);
+			}
+            else
+            {
+                break; //ensures the while loop will be exited when reach end of file
+            }
+        }
+    }
+    else
+		printf("Reached end of all tar files given");
+	
+    fclose(input);
+	time(&localEnd);
+    endTS = localtime(&localEnd);
+	fprintf(timedata,"Ending date/time: %s \n", asctime(endTS));
+	fclose(timedata);
+    return(0);
+}
+
+int checkHosts(int numberHosts, int avHosts,int userLength)
+{
+    char fgetsdata[100];
+    int  i, j;
+    int width = userLength / numberHosts;
+    char *givenHosts[numberHosts];
+    //allocate givenhosts 2-d array
+    for(i = 0; i < numberHosts;i++)
+    {
+        givenHosts[i] = (char*) malloc(maxhost*sizeof(char));
+    }
+    //allocate arrays for available hosts
+    char *available[avHosts];
+    for(i = 0; i < avHosts;i++)
+    {
+        available[i] = (char*) malloc (maxhost *sizeof(char));
+    }
+	//store data of possible hosts
+    nmap = fopen("nmap.txt", "r");
+    printf("data of available hosts\n");
+    //need to manually make a for loop for i so it only increments after getting an ip address
+    i = 0;
+    while(1)
+    {
+        fgets(fgetsdata,100,nmap);
+        if(fgetsdata[0] == 'N')
+        {
+			for(j= 0; j< maxhost; j++)
+			{
+				if(fgetsdata[j+21] == '\0'|| fgetsdata[j+21] == '\n'|| fgetsdata[j+21] == ' ')
+					break;
+				else
+				{
+					//Nmap scan report for 10.0.0.2
+					//21 chars to start
+					available[i][j] = fgetsdata[j+21];
+				}
+			}
+			if(!(fgetsdata[21+maxhost] <= 0x39 && fgetsdata[21+maxhost]<= 0x30 || fgetsdata[21+maxhost] == 0x2e))
+			{
+				printf("maybe invalid\n");
+			}
+			available[i][maxhost] = '\0';
+			printf("host%d %s\n ",i,available[i]);
+			i++;
+			if (i>= avHosts)
+				break;
+        }
+	}
+	fclose(nmap);
+	int d = 0;
+	//need to check each host name to see if it is available
+	int same, k;
+	bool valid = false;
+	tempHost = (char*)calloc(maxhost,sizeof(char));
+	j = 0;
+	for(i = 0;i < userLength;i++)
+	{
+        if(userInput[i] == ',')
+        {
+			tempHost[i] = '\0';
+			//check validity of tempHost here
+			for(k = 0; k <avHosts; k++)
+			{
+				same = strcmp(tempHost,available[k]);
+				if(same == 0)
+				{
+					printf("%s is valid\n", tempHost);
+					valid = true;
+					break;
+				}
+			}
+			if(valid == false)
+			{
+				printf("Host: %s is not available\n", tempHost);
+				return(FALSE);
+			}
+			//reset temp host in case host names are different lengths
+			free(tempHost);
+			tempHost = (char*)calloc(maxhost,sizeof(char));
+			j = 0;
+        }
+        else if (userInput[i] == ';')
+        {
+			tempHost[i] = '\0';
+			for(k = 0; k <avHosts; k++)
+			{
+				same = strcmp(tempHost,available[k]);
+				if(same == 0)
+				{
+					printf("%s is valid\n", tempHost);
+					valid = true;
+					break;
+				}
+			}
+			if(valid == false)
+			{
+				printf("Host: %s is not available\n", tempHost);
+				return(FALSE);
+			}
+        }
+        else
+        {
+			tempHost[j] = hosts[i];
+			j++;
+        }
+	}
+	//can only get here if valid was never false
+	return(TRUE);
+}
