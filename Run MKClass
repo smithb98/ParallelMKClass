@@ -1,0 +1,62 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+int main(int argc, char *argv[])
+{
+  char dirname[80],buffer[80],filename[80],tempname[80],extractname[80];
+  char Dirname[80],dirfile[80];
+  int err,n;
+  char *p;
+  FILE *in,*out;
+  if(argc != 2) 
+  {
+    printf("Usage: run_mkclass dirname.tar\n");
+    exit(1);
+  }
+  strcpy(dirfile,argv[1]);
+  p = strrchr(dirfile,'.');
+  n = p-dirfile;
+  strncpy(Dirname,dirfile,n);
+  Dirname[n] = '\0';
+  sprintf(buffer,"scp -r pi@10.0.0.3:/media/pi/LAMOST/DR5/%s ./",dirfile);
+  //sprintf(buffer,"scp -r mengqi@152.10.10.62:/home/mengqi/LAMOST_SPECTRA_DATA$
+  err = system(buffer);
+  //1) untars the tar file
+  sprintf(buffer,"tar -xvf %s",dirfile);
+  err = system(buffer);
+  chdir(Dirname);
+  //2) gunzips each of the spectra in the tar file
+  err = system("gunzip *.gz");
+ //3) makes a list of all the spectra.fits files
+  system("ls *.fits > temp.txt");
+  in = fopen("temp.txt","r");
+  if(in == NULL) {
+    printf("Cannot open temp.txt\n");
+    exit(1);
+  }
+  //4) uses that list to make a batch file, extract.bat, which extracts the data in the fits file to a text file readable by MKCLASS
+  out = fopen("extract.bat","w");
+  while(fscanf(in,"%s",filename) != EOF) 
+  {
+    fprintf(out,"extractLAMOST2018 %s\n",filename);
+  }
+  fclose(in);
+  fclose(out);
+  err = system("chmod a+x extract.bat");
+  //5) runs that batch file
+  err = system("./extract.bat");
+  //6) runs the program mkLMSTbat, which makes a batch file for running MKCLASS on all the spectra.
+  err = system("mkLMSTbat");
+  //7) runs that batch file
+  err = system("./lamost.bat");
+  //8) deletes the .fits and other files created in the process of classification.
+  err = system("rm *.fits");
+  err = system("rm *.flx");
+  err = system("rm *.nor");
+  err = system("rm *.mat");
+  err = system("rm *.cor");
+  return(0);
+  }
+
+
